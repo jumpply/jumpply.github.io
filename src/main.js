@@ -1,11 +1,13 @@
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 const DEFAULTS = {
-  url:      'http://192.168.4.1',
-  window:   10,
-  calc:     'median',
-  filename: 'medicion.json',
-  dark:     true,
+  url:          'http://192.168.4.1',
+  window:       10,
+  calc:         'median',
+  filename:     'medicion.json',
+  dark:         true,
+  filterOn:     true,
+  filterWindow: 5,
 };
 
 function loadConfig() {
@@ -32,8 +34,35 @@ let frameCount = 0;
 let lastSpsTs = performance.now();
 let spsAccum = 0;
 
-// Chart data buffers: each entry { t: DOMHighResTimeStamp, v: number }
+// Chart data buffers: each entry { x: DOMHighResTimeStamp, y: number }
 const buffers = { fl: [], fr: [], rl: [], rr: [], calc: [] };
+
+// Ring buffers for the median pre-filter (raw values, not chart points)
+const rawRings = { fl: [], fr: [], rl: [], rr: [] };
+
+// ─── Median pre-filter ────────────────────────────────────────────────────────
+
+function pushRing(ring, value) {
+  ring.push(value);
+  if (ring.length > cfg.filterWindow) ring.shift();
+}
+
+function medianOf(ring) {
+  if (ring.length === 0) return 0;
+  const s = ring.slice().sort((a, b) => a - b);
+  const m = s.length >> 1;
+  return s.length & 1 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+function applyFilter(key, raw) {
+  if (!cfg.filterOn) return raw;
+  pushRing(rawRings[key], raw);
+  return medianOf(rawRings[key]);
+}
+
+function resetRings() {
+  for (const k of Object.keys(rawRings)) rawRings[k] = [];
+}
 
 // ─── Chart setup ─────────────────────────────────────────────────────────────
 
@@ -127,7 +156,10 @@ function computeCalc(fl, fr, rl, rr) {
 
 function ingestFrame(raw) {
   const now = performance.now();
-  const { fl = 0, fr = 0, rl = 0, rr = 0 } = raw;
+  const fl = applyFilter('fl', raw.fl ?? 0);
+  const fr = applyFilter('fr', raw.fr ?? 0);
+  const rl = applyFilter('rl', raw.rl ?? 0);
+  const rr = applyFilter('rr', raw.rr ?? 0);
 
   const calc = computeCalc(fl, fr, rl, rr);
   const windowMs = cfg.window * 1000;
@@ -307,10 +339,12 @@ function saveRecording() {
 // ─── Settings modal ───────────────────────────────────────────────────────────
 
 function openSettings() {
-  document.getElementById('cfg-url').value      = cfg.url;
-  document.getElementById('cfg-window').value   = cfg.window;
-  document.getElementById('cfg-calc').value     = cfg.calc;
-  document.getElementById('cfg-filename').value = cfg.filename;
+  document.getElementById('cfg-url').value            = cfg.url;
+  document.getElementById('cfg-window').value         = cfg.window;
+  document.getElementById('cfg-calc').value           = cfg.calc;
+  document.getElementById('cfg-filename').value       = cfg.filename;
+  document.getElementById('cfg-filter-on').checked   = cfg.filterOn;
+  document.getElementById('cfg-filter-window').value = cfg.filterWindow;
   updateDarkToggle();
   document.getElementById('modal-settings').classList.remove('hidden');
 }
@@ -320,16 +354,18 @@ function closeSettings() {
 }
 
 function applySettings() {
-  cfg.url      = document.getElementById('cfg-url').value.trim()      || DEFAULTS.url;
-  cfg.window   = parseFloat(document.getElementById('cfg-window').value) || DEFAULTS.window;
-  cfg.calc     = document.getElementById('cfg-calc').value;
-  cfg.filename = document.getElementById('cfg-filename').value.trim()  || DEFAULTS.filename;
+  cfg.url          = document.getElementById('cfg-url').value.trim()         || DEFAULTS.url;
+  cfg.window       = parseFloat(document.getElementById('cfg-window').value)  || DEFAULTS.window;
+  cfg.calc         = document.getElementById('cfg-calc').value;
+  cfg.filename     = document.getElementById('cfg-filename').value.trim()     || DEFAULTS.filename;
+  cfg.filterOn     = document.getElementById('cfg-filter-on').checked;
+  cfg.filterWindow = parseInt(document.getElementById('cfg-filter-window').value, 10) || DEFAULTS.filterWindow;
   saveConfig(cfg);
 
-  // update chart label for calc line
+  resetRings();
+
   chart.data.datasets[4].label = cfg.calc.toUpperCase();
 
-  // reconnect with new URL
   disconnect();
   connect();
 

@@ -140,6 +140,29 @@
           </label>
         </section>
 
+        <!-- Filter -->
+        <section>
+          <h3 class="settings-section-title">PREPROCESADO</h3>
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-scope-dim">Filtro de mediana</span>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input id="cfg-filter-on" type="checkbox" class="w-4 h-4 accent-[#33ff33] cursor-pointer" />
+              <span class="text-xs text-scope-dim">activo</span>
+            </label>
+          </div>
+          <label class="settings-label mt-3">Ventana del filtro (muestras)
+            <select id="cfg-filter-window" class="settings-input">
+              <option value="3">3 — mínimo (elimina spikes aislados)</option>
+              <option value="5">5 — recomendado</option>
+              <option value="7">7 — más suavizado</option>
+              <option value="11">11 — muy suave</option>
+            </select>
+          </label>
+          <p class="text-[10px] text-scope-dim/60 mt-1 leading-relaxed">
+            La mediana deslizante elimina picos eléctricos sin difuminar transiciones reales (impacto de salto).
+          </p>
+        </section>
+
         <!-- Save -->
         <section>
           <h3 class="settings-section-title">ARCHIVO</h3>
