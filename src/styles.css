@@ -1,63 +1,31 @@
-/* Oscilloscope grid background */
-#scope-chart {
-  background-color: #0a0a0a;
-}
-
-/* Action buttons */
 .action-btn {
-  @apply flex flex-col items-center gap-0.5 text-[#33ff33] opacity-80
-         hover:opacity-100 active:scale-95 transition-all
-         disabled:opacity-30 disabled:cursor-not-allowed
-         min-w-[56px] py-1 px-2 rounded-lg;
+  @apply flex flex-col items-center gap-0.5 text-gray-500 dark:text-gray-400
+         hover:text-gray-900 dark:hover:text-white active:scale-95
+         transition-all disabled:opacity-30 disabled:cursor-not-allowed
+         text-[10px] font-medium tracking-wide min-w-[52px] py-1 px-2 rounded-xl;
 }
 
-.action-btn:disabled svg {
-  @apply opacity-40;
+.section-title {
+  @apply text-[10px] uppercase tracking-widest font-semibold text-gray-400 dark:text-gray-500;
 }
 
-/* Settings helpers */
-.settings-section-title {
-  @apply text-[10px] tracking-widest text-scope-dim mb-2;
+.field-label {
+  @apply flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-300;
 }
 
-.settings-label {
-  @apply flex flex-col gap-1 text-xs text-scope-dim;
+.field-input {
+  @apply mt-0.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700
+         rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-gray-100
+         focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
+         placeholder-gray-400 dark:placeholder-gray-600;
 }
 
-.settings-input {
-  @apply bg-gray-900 border border-scope-border rounded-lg px-3 py-2
-         text-scope-text text-sm focus:outline-none focus:border-scope-text
-         placeholder-scope-dim/40;
-}
-
-select.settings-input option {
-  background-color: #111;
+select.field-input option {
+  background-color: #1f2937;
 }
 
 .esp-btn {
-  @apply bg-gray-900 border border-scope-border rounded-lg px-3 py-2
-         text-xs text-scope-text hover:bg-gray-800 active:scale-95
-         transition-all tracking-wider;
+  @apply bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700
+         rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-200
+         hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-all;
 }
-
-/* Light mode overrides */
-html:not(.dark) body {
-  background-color: #f0f4f0;
-  color: #1a3a1a;
-}
-
-html:not(.dark) #scope-chart {
-  background-color: #e8f0e8;
-}
-
-html:not(.dark) .bg-scope-bg { background-color: #f0f4f0; }
-html:not(.dark) .text-scope-text { color: #0d6e0d; }
-html:not(.dark) .text-scope-dim { color: #4a7a4a; }
-html:not(.dark) .border-scope-border { border-color: #9bbf9b; }
-html:not(.dark) .action-btn { color: #0d6e0d; }
-html:not(.dark) .settings-input { background-color: #fff; border-color: #9bbf9b; color: #0d6e0d; }
-html:not(.dark) .esp-btn { background-color: #fff; border-color: #9bbf9b; color: #0d6e0d; }
-html:not(.dark) .bg-gray-950 { background-color: #f8faf8; }
-html:not(.dark) .bg-gray-900 { background-color: #f0f4f0; }
-html:not(.dark) .bg-gray-800 { background-color: #e0eae0; }
-html:not(.dark) #settings-save { background-color: #0d6e0d; color: #fff; }

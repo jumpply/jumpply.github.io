@@ -3,63 +3,45 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#0a0a0a" />
+  <meta name="theme-color" content="#030712" />
   <title>Jump Platform</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" href="icons/icon-192.png" />
   <script src="src/tailwind.min.js"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            scope: {
-              bg:     '#0a0a0a',
-              grid:   '#1a2a1a',
-              border: '#1f3a1f',
-              text:   '#33ff33',
-              dim:    '#1a8c1a',
-            }
-          },
-          fontFamily: {
-            mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
-          }
-        }
-      }
-    }
-  </script>
+  <script>tailwind.config = { darkMode: 'class' }</script>
   <script src="src/chart.umd.min.js"></script>
   <link rel="stylesheet" href="src/styles.css" />
 </head>
-<body class="bg-scope-bg text-scope-text font-mono h-dvh flex flex-col overflow-hidden">
+<body class="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 h-dvh flex flex-col overflow-hidden">
 
-  <!-- Mixed content warning banner -->
-  <div id="mixed-content-banner" class="hidden bg-yellow-900 border-b border-yellow-600 text-yellow-200 text-xs px-3 py-2 flex items-center gap-2">
-    <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
-    <span>HTTPS bloqueará conexiones HTTP al ESP32. Abre esta app en <strong>http://</strong> o permite contenido inseguro en ajustes del sitio.</span>
-    <button onclick="document.getElementById('mixed-content-banner').classList.add('hidden')" class="ml-auto text-yellow-400 hover:text-white">✕</button>
+  <!-- Mixed content warning -->
+  <div id="mixed-content-banner" class="hidden items-center gap-2 bg-amber-50 dark:bg-amber-950 border-b border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs px-3 py-2">
+    <svg class="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+      <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+    </svg>
+    <span>HTTPS bloqueará conexiones HTTP al ESP32. Usá <strong>http://</strong> o permitir contenido inseguro en ajustes del sitio.</span>
+    <button onclick="this.parentElement.classList.add('hidden')" class="ml-auto opacity-60 hover:opacity-100">✕</button>
   </div>
 
-  <!-- Top status bar -->
-  <div class="flex items-center justify-between px-3 py-1.5 border-b border-scope-border text-xs text-scope-dim">
-    <div class="flex items-center gap-2">
-      <span id="status-dot" class="w-2 h-2 rounded-full bg-red-500"></span>
-      <span id="status-text">DISCONNECTED</span>
+  <!-- Status bar -->
+  <div class="flex items-center justify-between px-4 py-2 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 shrink-0">
+    <div class="flex items-center gap-2 min-w-0">
+      <span id="status-dot" class="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>
+      <span id="status-text" class="truncate">DISCONNECTED</span>
     </div>
-    <div class="flex items-center gap-3">
-      <span id="sps-counter">-- SPS</span>
-      <span id="rec-indicator" class="hidden text-red-500 animate-pulse font-bold">● REC</span>
+    <div class="flex items-center gap-3 shrink-0">
+      <span id="sps-counter" class="font-mono">-- SPS</span>
+      <span id="rec-indicator" class="hidden text-red-500 font-semibold animate-pulse">● REC</span>
     </div>
-    <div class="text-scope-dim" id="clock">--:--:--</div>
+    <span id="clock" class="font-mono shrink-0">--:--:--</span>
   </div>
 
   <!-- Chart area -->
-  <div class="flex-1 relative p-2 min-h-0">
-    <canvas id="scope-chart" class="w-full h-full"></canvas>
+  <div class="flex-1 relative min-h-0 p-2 bg-white dark:bg-gray-950">
+    <canvas id="scope-chart" class="w-full h-full rounded-lg"></canvas>
 
-    <!-- Pending save badge — shown after STOP, before SAVE -->
-    <div id="pending-save-badge" class="hidden absolute bottom-3 right-3 flex items-center gap-1.5 bg-yellow-900/80 border border-yellow-600 text-yellow-300 text-xs font-mono px-2.5 py-1.5 rounded-lg backdrop-blur-sm">
+    <!-- Pending save badge -->
+    <div id="pending-save-badge" class="hidden absolute bottom-3 right-3 flex items-center gap-1.5 bg-white dark:bg-gray-800 border border-amber-300 dark:border-amber-600 text-amber-700 dark:text-amber-400 text-xs px-2.5 py-1.5 rounded-lg shadow-md">
       <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
       </svg>
@@ -67,148 +49,167 @@
     </div>
   </div>
 
+  <!-- Widgets row -->
+  <div class="grid grid-cols-2 gap-2 px-2 pt-2 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 shrink-0">
+
+    <!-- Total weight -->
+    <div class="flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-xl py-3 px-2">
+      <span id="widget-total" class="text-4xl font-bold font-mono tabular-nums tracking-tight text-gray-900 dark:text-white">--</span>
+      <span class="text-[10px] uppercase tracking-widest text-gray-400 dark:text-gray-500 mt-1">Total</span>
+    </div>
+
+    <!-- COP indicator -->
+    <div class="flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-xl py-2 px-2">
+      <canvas id="cop-canvas"></canvas>
+      <span class="text-[10px] uppercase tracking-widest text-gray-400 dark:text-gray-500 mt-1">Centro de presión</span>
+    </div>
+
+  </div>
+
   <!-- Legend -->
-  <div class="flex flex-wrap justify-center gap-x-4 gap-y-1 px-3 py-1.5 text-xs border-t border-scope-border">
-    <span class="flex items-center gap-1"><span class="w-3 h-px bg-[#00ff88] inline-block opacity-80"></span>FL</span>
-    <span class="flex items-center gap-1"><span class="w-3 h-px bg-[#00aaff] inline-block opacity-80"></span>FR</span>
-    <span class="flex items-center gap-1"><span class="w-3 h-px bg-[#ff8800] inline-block opacity-80"></span>RL</span>
-    <span class="flex items-center gap-1"><span class="w-3 h-px bg-[#ff4455] inline-block opacity-80"></span>RR</span>
-    <span class="flex items-center gap-1"><span class="w-3 h-0.5 bg-gray-400 inline-block opacity-60"></span>CALC</span>
-    <span class="flex items-center gap-1 font-semibold text-[#33ff33]"><span class="w-4 h-1 bg-[#33ff33] inline-block rounded-full"></span>TOTAL</span>
+  <div class="flex flex-wrap justify-center gap-x-4 gap-y-1 px-3 py-2 text-xs text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900 shrink-0">
+    <span class="flex items-center gap-1.5"><span class="w-3 h-0.5 rounded-full bg-emerald-400 inline-block"></span>FL</span>
+    <span class="flex items-center gap-1.5"><span class="w-3 h-0.5 rounded-full bg-sky-400 inline-block"></span>FR</span>
+    <span class="flex items-center gap-1.5"><span class="w-3 h-0.5 rounded-full bg-amber-400 inline-block"></span>RL</span>
+    <span class="flex items-center gap-1.5"><span class="w-3 h-0.5 rounded-full bg-rose-400 inline-block"></span>RR</span>
+    <span class="flex items-center gap-1.5"><span class="w-3 h-px rounded-full bg-slate-400 inline-block opacity-60"></span>CALC</span>
+    <span class="flex items-center gap-1.5 font-semibold text-indigo-500 dark:text-indigo-400"><span class="w-4 h-1 rounded-full bg-indigo-500 dark:bg-indigo-400 inline-block"></span>TOTAL</span>
   </div>
 
   <!-- Action bar -->
-  <div class="flex items-center justify-around px-4 py-3 border-t border-scope-border bg-black/30">
-    <button id="btn-settings" title="Settings" class="action-btn">
-      <!-- gear icon -->
-      <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+  <div class="flex items-center justify-around px-2 py-2 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 shrink-0">
+
+    <button id="btn-settings" class="action-btn">
+      <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
         <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
         <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
       </svg>
-      <span class="text-xs mt-0.5">CONFIG</span>
+      <span>Config</span>
     </button>
 
-    <button id="btn-rec" title="Grabar" class="action-btn">
-      <!-- record icon -->
-      <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
+    <button id="btn-rec" class="action-btn text-red-500 dark:text-red-400">
+      <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
         <circle cx="12" cy="12" r="8"/>
       </svg>
-      <span class="text-xs mt-0.5">REC</span>
+      <span>Rec</span>
     </button>
 
-    <button id="btn-stop" title="Detener grabación" class="action-btn" disabled>
-      <!-- stop icon -->
-      <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
-        <rect x="4" y="4" width="16" height="16" rx="2"/>
+    <button id="btn-stop" class="action-btn" disabled>
+      <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+        <rect x="5" y="5" width="14" height="14" rx="2"/>
       </svg>
-      <span class="text-xs mt-0.5">STOP</span>
+      <span>Stop</span>
     </button>
 
-    <button id="btn-save" title="Guardar JSON" class="action-btn" disabled>
-      <!-- save/download icon -->
-      <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+    <button id="btn-save" class="action-btn" disabled>
+      <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
         <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
       </svg>
-      <span class="text-xs mt-0.5">SAVE</span>
+      <span>Guardar</span>
     </button>
+
+    <button id="btn-reset" class="action-btn text-amber-500 dark:text-amber-400">
+      <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"/>
+      </svg>
+      <span>Reset</span>
+    </button>
+
   </div>
 
   <!-- Settings Modal -->
-  <div id="modal-settings" class="hidden fixed inset-0 bg-black/80 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-    <div class="bg-gray-950 border border-scope-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90dvh] overflow-y-auto">
-      <div class="flex items-center justify-between px-5 py-4 border-b border-scope-border">
-        <h2 class="text-scope-text font-semibold tracking-widest text-sm">CONFIGURACIÓN</h2>
-        <button id="modal-close" class="text-scope-dim hover:text-scope-text text-lg leading-none">✕</button>
+  <div id="modal-settings" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
+    <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90dvh] overflow-y-auto shadow-2xl">
+
+      <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+        <h2 class="font-semibold text-sm tracking-wide">Configuración</h2>
+        <button id="modal-close" class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl leading-none">✕</button>
       </div>
 
       <div class="px-5 py-4 space-y-5">
 
         <!-- Connection -->
-        <section>
-          <h3 class="settings-section-title">CONEXIÓN</h3>
-          <label class="settings-label">URL del ESP32
-            <input id="cfg-url" type="url" class="settings-input" placeholder="http://192.168.4.1" />
+        <section class="space-y-2">
+          <h3 class="section-title">Conexión</h3>
+          <label class="field-label">URL del ESP32
+            <input id="cfg-url" type="url" class="field-input" placeholder="http://192.168.4.1" />
           </label>
         </section>
 
         <!-- Chart -->
-        <section>
-          <h3 class="settings-section-title">GRÁFICO</h3>
-          <label class="settings-label">Ventana de tiempo (segundos)
-            <input id="cfg-window" type="number" min="1" max="120" class="settings-input" />
+        <section class="space-y-2">
+          <h3 class="section-title">Gráfico</h3>
+          <label class="field-label">Ventana de tiempo (segundos)
+            <input id="cfg-window" type="number" min="1" max="120" class="field-input" />
           </label>
-          <label class="settings-label mt-3">Línea secundaria (CALC)
-            <select id="cfg-calc" class="settings-input">
-              <option value="median">Mediana de los 4 sensores</option>
-              <option value="mean">Media de los 4 sensores</option>
+          <label class="field-label">Línea CALC (secundaria)
+            <select id="cfg-calc" class="field-input">
+              <option value="median">Mediana</option>
+              <option value="mean">Media</option>
             </select>
           </label>
         </section>
 
-        <!-- Filter -->
-        <section>
-          <h3 class="settings-section-title">PREPROCESADO</h3>
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-scope-dim">Filtro de mediana</span>
+        <!-- Preprocessing -->
+        <section class="space-y-2">
+          <h3 class="section-title">Preprocesado</h3>
+          <div class="flex items-center justify-between py-1">
+            <span class="text-sm text-gray-600 dark:text-gray-300">Filtro de mediana</span>
             <label class="flex items-center gap-2 cursor-pointer">
-              <input id="cfg-filter-on" type="checkbox" class="w-4 h-4 accent-[#33ff33] cursor-pointer" />
-              <span class="text-xs text-scope-dim">activo</span>
+              <input id="cfg-filter-on" type="checkbox" class="w-4 h-4 rounded accent-indigo-500 cursor-pointer" />
+              <span class="text-xs text-gray-400">activo</span>
             </label>
           </div>
-          <label class="settings-label mt-3">Ventana del filtro (muestras)
-            <select id="cfg-filter-window" class="settings-input">
-              <option value="3">3 — mínimo (elimina spikes aislados)</option>
+          <label class="field-label">Ventana del filtro (muestras)
+            <select id="cfg-filter-window" class="field-input">
+              <option value="3">3 — mínimo</option>
               <option value="5">5 — recomendado</option>
-              <option value="7">7 — más suavizado</option>
+              <option value="7">7 — suave</option>
               <option value="11">11 — muy suave</option>
             </select>
           </label>
-          <p class="text-[10px] text-scope-dim/60 mt-1 leading-relaxed">
-            La mediana deslizante elimina picos eléctricos sin difuminar transiciones reales (impacto de salto).
-          </p>
         </section>
 
-        <!-- Save -->
-        <section>
-          <h3 class="settings-section-title">ARCHIVO</h3>
-          <label class="settings-label">Nombre del archivo JSON
-            <input id="cfg-filename" type="text" class="settings-input" placeholder="medicion.json" />
+        <!-- File -->
+        <section class="space-y-2">
+          <h3 class="section-title">Archivo</h3>
+          <label class="field-label">Nombre del archivo JSON
+            <input id="cfg-filename" type="text" class="field-input" placeholder="medicion.json" />
           </label>
         </section>
 
         <!-- Appearance -->
-        <section>
-          <h3 class="settings-section-title">APARIENCIA</h3>
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-scope-dim">Modo oscuro</span>
-            <button id="toggle-dark" role="switch" class="relative w-10 h-5 rounded-full transition-colors focus:outline-none bg-scope-dim">
+        <section class="space-y-2">
+          <h3 class="section-title">Apariencia</h3>
+          <div class="flex items-center justify-between py-1">
+            <span class="text-sm text-gray-600 dark:text-gray-300">Modo oscuro</span>
+            <button id="toggle-dark" role="switch" class="relative w-10 h-5 rounded-full bg-gray-200 dark:bg-indigo-600 transition-colors focus:outline-none">
               <span id="toggle-dark-thumb" class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform"></span>
             </button>
           </div>
         </section>
 
-        <!-- Divider -->
-        <hr class="border-scope-border" />
+        <hr class="border-gray-100 dark:border-gray-800" />
 
-        <!-- ESP32 Actions -->
-        <section>
-          <h3 class="settings-section-title">ACCIONES ESP32</h3>
-          <div class="grid grid-cols-3 gap-2 mt-2">
-            <button id="esp-tare" class="esp-btn">TARE</button>
-            <button id="esp-save" class="esp-btn">SAVE</button>
-            <button id="esp-calibrate-open" class="esp-btn col-span-3">CALIBRATE…</button>
+        <!-- ESP32 actions -->
+        <section class="space-y-2">
+          <h3 class="section-title">Acciones ESP32</h3>
+          <div class="grid grid-cols-3 gap-2">
+            <button id="esp-tare" class="esp-btn">Tare</button>
+            <button id="esp-save" class="esp-btn">Save</button>
+            <button id="esp-calibrate-open" class="esp-btn col-span-3">Calibrate…</button>
           </div>
-          <!-- Calibrate sub-form -->
-          <div id="calibrate-form" class="hidden mt-3 flex gap-2 items-center">
-            <input id="cal-weight" type="number" step="0.01" class="settings-input flex-1" placeholder="Peso conocido (kg)" />
+          <div id="calibrate-form" class="hidden flex gap-2 items-center pt-1">
+            <input id="cal-weight" type="number" step="0.01" class="field-input flex-1" placeholder="Peso conocido (kg)" />
             <button id="esp-calibrate-send" class="esp-btn whitespace-nowrap">Enviar</button>
           </div>
-          <div id="esp-response" class="mt-2 text-xs text-green-400 min-h-[1.2em]"></div>
+          <p id="esp-response" class="text-xs text-green-600 dark:text-green-400 min-h-[1.25rem]"></p>
         </section>
 
-        <button id="settings-save" class="w-full py-2 rounded-lg bg-scope-text text-black text-sm font-bold tracking-widest hover:bg-green-400 transition-colors">
-          GUARDAR
+        <button id="settings-save" class="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition-colors">
+          Guardar configuración
         </button>
+
       </div>
     </div>
   </div>

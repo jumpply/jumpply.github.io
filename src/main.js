@@ -31,16 +31,15 @@ let recording = false;
 let recordedSamples = [];
 let recordStart = null;
 let recordStartPerfNow = 0;
-let lastEspT = -1;  // last seen ESP32 timestamp, deduplication guard
 let hasPendingSave = false;
-let frameCount = 0;
+let lastEspT = -1;
 let lastSpsTs = performance.now();
 let spsAccum = 0;
 
-// Chart data buffers: each entry { x: DOMHighResTimeStamp, y: number }
+// Chart data buffers — each entry { x: DOMHighResTimeStamp, y: number }
 const buffers = { fl: [], fr: [], rl: [], rr: [], calc: [], total: [] };
 
-// Ring buffers for the median pre-filter (raw values, not chart points)
+// Ring buffers for the median pre-filter
 const rawRings = { fl: [], fr: [], rl: [], rr: [] };
 
 // ─── Median pre-filter ────────────────────────────────────────────────────────
@@ -67,44 +66,56 @@ function resetRings() {
   for (const k of Object.keys(rawRings)) rawRings[k] = [];
 }
 
-// ─── Chart setup ─────────────────────────────────────────────────────────────
+// ─── Colors ───────────────────────────────────────────────────────────────────
 
-const canvas = document.getElementById('scope-chart');
-const ctx = canvas.getContext('2d');
-
-const COLORS = {
-  fl:    '#00ff88',
-  fr:    '#00aaff',
-  rl:    '#ff8800',
-  rr:    '#ff4455',
-  calc:  'rgba(180,180,180,0.55)',
-  total: '#33ff33',
+const SENSOR_COLORS = {
+  fl:    '#34d399',  // emerald-400
+  fr:    '#38bdf8',  // sky-400
+  rl:    '#fbbf24',  // amber-400
+  rr:    '#fb7185',  // rose-400
+  calc:  '#94a3b8',  // slate-400
+  total: '#818cf8',  // indigo-400
 };
 
-function makeDataset(key, label, borderWidth = 1.2, alpha = 1) {
+function chartTheme() {
+  const dark = document.documentElement.classList.contains('dark');
+  return {
+    grid:   dark ? '#1f2937' : '#f3f4f6',   // gray-800 / gray-100
+    border: dark ? '#374151' : '#e5e7eb',   // gray-700 / gray-200
+    ticks:  dark ? '#6b7280' : '#9ca3af',   // gray-500 / gray-400
+    bg:     dark ? '#030712' : '#ffffff',
+  };
+}
+
+// ─── Chart ───────────────────────────────────────────────────────────────────
+
+const canvas = document.getElementById('scope-chart');
+const chartCtx = canvas.getContext('2d');
+
+function makeDataset(key, label, borderWidth = 1.5) {
   return {
     label,
     data: [],
-    borderColor: COLORS[key],
+    borderColor: SENSOR_COLORS[key],
     borderWidth,
     pointRadius: 0,
     tension: 0,
     parsing: false,
-    borderDash: [],
   };
 }
 
-const chart = new Chart(ctx, {
+const theme = chartTheme();
+
+const chart = new Chart(chartCtx, {
   type: 'line',
   data: {
     datasets: [
-      makeDataset('fl',   'FL',   1),
-      makeDataset('fr',   'FR',   1),
-      makeDataset('rl',   'RL',   1),
-      makeDataset('rr',   'RR',   1),
-      makeDataset('calc', cfg.calc.toUpperCase(), 1.5),
-      // total drawn last so it renders on top
-      { ...makeDataset('total', 'TOTAL', 3), borderColor: COLORS.total },
+      makeDataset('fl',    'FL',    1),
+      makeDataset('fr',    'FR',    1),
+      makeDataset('rl',    'RL',    1),
+      makeDataset('rr',    'RR',    1),
+      makeDataset('calc',  'CALC',  1.2),
+      makeDataset('total', 'TOTAL', 3),
     ],
   },
   options: {
@@ -120,47 +131,129 @@ const chart = new Chart(ctx, {
       x: {
         type: 'linear',
         ticks: { display: false },
-        grid: {
-          color: '#1a2a1a',
-          drawBorder: false,
-        },
-        border: { color: '#1f3a1f' },
+        grid: { color: theme.grid },
+        border: { color: theme.border },
       },
       y: {
         ticks: {
-          color: '#1a8c1a',
+          color: theme.ticks,
           font: { family: 'ui-monospace, monospace', size: 10 },
-          maxTicksLimit: 6,
+          maxTicksLimit: 5,
         },
-        grid: {
-          color: '#1a2a1a',
-          drawBorder: false,
-        },
-        border: { color: '#1f3a1f' },
+        grid: { color: theme.grid },
+        border: { color: theme.border },
       },
     },
   },
 });
 
-// ─── Computed metric ──────────────────────────────────────────────────────────
-
-function computeCalc(fl, fr, rl, rr) {
-  switch (cfg.calc) {
-    case 'median': {
-      const sorted = [fl, fr, rl, rr].slice().sort((a, b) => a - b);
-      return (sorted[1] + sorted[2]) / 2;
-    }
-    case 'mean':
-    default:
-      return (fl + fr + rl + rr) / 4;
-  }
+function updateChartTheme() {
+  const t = chartTheme();
+  chart.options.scales.x.grid.color = t.grid;
+  chart.options.scales.x.border.color = t.border;
+  chart.options.scales.y.grid.color = t.grid;
+  chart.options.scales.y.border.color = t.border;
+  chart.options.scales.y.ticks.color = t.ticks;
+  chart.update('none');
 }
 
-// ─── SSE data ingestion ───────────────────────────────────────────────────────
+// ─── COP canvas ───────────────────────────────────────────────────────────────
+
+const copCanvas = document.getElementById('cop-canvas');
+const copCtx = copCanvas.getContext('2d');
+
+function initCOPCanvas() {
+  const container = copCanvas.parentElement;
+  // square: use the container's width (minus padding) as the side
+  const side = Math.max(60, Math.min(container.clientWidth - 16, container.clientHeight - 28));
+  copCanvas.width  = side;
+  copCanvas.height = side;
+  drawCOP(0, 0);
+}
+
+function drawCOP(nx, ny) {
+  const w = copCanvas.width;
+  const h = copCanvas.height;
+  const dark = document.documentElement.classList.contains('dark');
+  const cx = w / 2;
+  const cy = h / 2;
+  const rMax = Math.min(cx, cy) - 3;
+
+  copCtx.clearRect(0, 0, w, h);
+
+  // background
+  copCtx.fillStyle = dark ? '#1f2937' : '#f9fafb';
+  copCtx.fillRect(0, 0, w, h);
+
+  // concentric rings
+  const ringColor = dark ? '#374151' : '#e5e7eb';
+  for (const f of [0.33, 0.66, 1]) {
+    copCtx.beginPath();
+    copCtx.arc(cx, cy, rMax * f, 0, Math.PI * 2);
+    copCtx.strokeStyle = ringColor;
+    copCtx.lineWidth = 1;
+    copCtx.stroke();
+  }
+
+  // crosshair
+  copCtx.strokeStyle = dark ? '#4b5563' : '#d1d5db';
+  copCtx.lineWidth = 1;
+  copCtx.beginPath();
+  copCtx.moveTo(cx, cy - rMax); copCtx.lineTo(cx, cy + rMax);
+  copCtx.moveTo(cx - rMax, cy); copCtx.lineTo(cx + rMax, cy);
+  copCtx.stroke();
+
+  // corner labels
+  const labelColor = dark ? '#6b7280' : '#9ca3af';
+  const fontSize = Math.max(8, Math.round(w * 0.1));
+  copCtx.fillStyle = labelColor;
+  copCtx.font = `${fontSize}px ui-sans-serif, sans-serif`;
+  const pad = 4;
+  copCtx.textAlign = 'left';  copCtx.fillText('FL', pad, fontSize + pad);
+  copCtx.textAlign = 'right'; copCtx.fillText('FR', w - pad, fontSize + pad);
+  copCtx.textAlign = 'left';  copCtx.fillText('RL', pad, h - pad);
+  copCtx.textAlign = 'right'; copCtx.fillText('RR', w - pad, h - pad);
+
+  // dot position (nx, ny in [-1, 1]; y axis inverted for canvas)
+  const dx = cx + nx * rMax;
+  const dy = cy - ny * rMax;
+
+  // glow
+  copCtx.beginPath();
+  copCtx.arc(dx, dy, 10, 0, Math.PI * 2);
+  copCtx.fillStyle = 'rgba(129,140,248,0.25)';
+  copCtx.fill();
+
+  // dot
+  copCtx.beginPath();
+  copCtx.arc(dx, dy, 5, 0, Math.PI * 2);
+  copCtx.fillStyle = '#6366f1';
+  copCtx.fill();
+}
+
+function computeCOP(fl, fr, rl, rr) {
+  const absTotal = Math.abs(fl + fr + rl + rr);
+  if (absTotal < 1) return { x: 0, y: 0 };
+  return {
+    x: Math.max(-1, Math.min(1, (fr + rr - fl - rl) / absTotal)),
+    y: Math.max(-1, Math.min(1, (fl + fr - rl - rr) / absTotal)),
+  };
+}
+
+// ─── Computed line metric ─────────────────────────────────────────────────────
+
+function computeCalc(fl, fr, rl, rr) {
+  if (cfg.calc === 'mean') return (fl + fr + rl + rr) / 4;
+  // median
+  const s = [fl, fr, rl, rr].slice().sort((a, b) => a - b);
+  return (s[1] + s[2]) / 2;
+}
+
+// ─── Data ingestion ───────────────────────────────────────────────────────────
 
 function ingestFrame(raw) {
   const espT = raw.t ?? -1;
-  if (espT !== -1 && espT === lastEspT) return;  // duplicate frame, skip
+  if (espT !== -1 && espT === lastEspT) return;
   lastEspT = espT;
 
   const now = performance.now();
@@ -177,12 +270,10 @@ function ingestFrame(raw) {
   function push(buf, val) {
     buf.push({ x: now, y: val });
     if (!recording) {
-      // sliding window: discard points older than the configured window
       let lo = 0;
       while (lo < buf.length - 1 && buf[lo].x < cutoff) lo++;
       if (lo > 0) buf.splice(0, lo);
     }
-    // while recording: accumulate everything, no trim
   }
 
   push(buffers.fl,    fl);
@@ -199,72 +290,57 @@ function ingestFrame(raw) {
   chart.data.datasets[4].data = buffers.calc;
   chart.data.datasets[5].data = buffers.total;
 
-  if (recording) {
-    chart.options.scales.x.min = recordStartPerfNow;
-  } else {
-    chart.options.scales.x.min = cutoff;
-  }
+  chart.options.scales.x.min = recording ? recordStartPerfNow : cutoff;
   chart.options.scales.x.max = now;
   chart.update('none');
+
+  // total widget
+  document.getElementById('widget-total').textContent =
+    total.toLocaleString(undefined, { maximumFractionDigits: 1 });
+
+  // COP
+  const cop = computeCOP(fl, fr, rl, rr);
+  drawCOP(cop.x, cop.y);
 
   // SPS counter
   spsAccum++;
   const elapsed = now - lastSpsTs;
   if (elapsed >= 1000) {
-    const sps = Math.round(spsAccum * 1000 / elapsed);
-    document.getElementById('sps-counter').textContent = `${sps} SPS`;
+    document.getElementById('sps-counter').textContent =
+      `${Math.round(spsAccum * 1000 / elapsed)} SPS`;
     spsAccum = 0;
     lastSpsTs = now;
   }
 
   if (recording) {
-    recordedSamples.push({
-      t: raw.t ?? Date.now(),
-      fl, fr, rl, rr, total, calc,
-    });
+    recordedSamples.push({ t: espT !== -1 ? espT : Date.now(), fl, fr, rl, rr, total, calc });
   }
 }
 
-// ─── SSE connection ───────────────────────────────────────────────────────────
+// ─── SSE ─────────────────────────────────────────────────────────────────────
 
 function connect() {
-  if (sse) {
-    sse.close();
-    sse = null;
-  }
-
-  const url = `${cfg.url}/data`;
+  if (sse) { sse.close(); sse = null; }
   setStatus('connecting');
-
   try {
-    sse = new EventSource(url);
-  } catch (e) {
+    sse = new EventSource(`${cfg.url}/data`);
+  } catch {
     setStatus('error');
     return;
   }
-
   sse.onopen = () => setStatus('connected');
-
   sse.onmessage = (ev) => {
-    try {
-      ingestFrame(JSON.parse(ev.data));
-    } catch { /* skip malformed frame */ }
+    try { ingestFrame(JSON.parse(ev.data)); } catch { /* skip */ }
   };
-
   sse.onerror = () => {
     setStatus('disconnected');
-    sse.close();
-    sse = null;
-    // auto-reconnect after 3s
+    sse.close(); sse = null;
     setTimeout(connect, 3000);
   };
 }
 
 function disconnect() {
-  if (sse) {
-    sse.close();
-    sse = null;
-  }
+  if (sse) { sse.close(); sse = null; }
   setStatus('disconnected');
 }
 
@@ -273,23 +349,23 @@ function disconnect() {
 function setStatus(state) {
   const dot  = document.getElementById('status-dot');
   const text = document.getElementById('status-text');
-  dot.className = 'w-2 h-2 rounded-full';
+  dot.className = 'w-2 h-2 rounded-full shrink-0';
   switch (state) {
     case 'connected':
-      dot.classList.add('bg-green-400');
-      text.textContent = `CONNECTED · ${cfg.url}`;
+      dot.classList.add('bg-emerald-500');
+      text.textContent = `${cfg.url}`;
       break;
     case 'connecting':
-      dot.classList.add('bg-yellow-400', 'animate-pulse');
-      text.textContent = 'CONNECTING…';
+      dot.classList.add('bg-amber-400', 'animate-pulse');
+      text.textContent = 'Conectando…';
       break;
     case 'error':
       dot.classList.add('bg-red-500');
-      text.textContent = 'ERROR';
+      text.textContent = 'Error';
       break;
     default:
       dot.classList.add('bg-red-500');
-      text.textContent = 'DISCONNECTED';
+      text.textContent = 'Desconectado';
   }
 }
 
@@ -298,18 +374,18 @@ function setStatus(state) {
 async function espAction(cmd) {
   const resp = document.getElementById('esp-response');
   resp.textContent = '…';
+  resp.className = 'text-xs text-gray-400 min-h-[1.25rem]';
   try {
     const r = await fetch(`${cfg.url}/action`, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: cmd,
     });
-    const text = await r.text();
-    resp.textContent = text;
-    resp.className = 'mt-2 text-xs text-green-400 min-h-[1.2em]';
+    resp.textContent = await r.text();
+    resp.className = 'text-xs text-emerald-600 dark:text-emerald-400 min-h-[1.25rem]';
   } catch (e) {
-    resp.textContent = `ERR: ${e.message}`;
-    resp.className = 'mt-2 text-xs text-red-400 min-h-[1.2em]';
+    resp.textContent = `Error: ${e.message}`;
+    resp.className = 'text-xs text-red-500 min-h-[1.25rem]';
   }
 }
 
@@ -325,8 +401,10 @@ function updatePendingSaveUI() {
   if (hasPendingSave && recordedSamples.length > 0) {
     count.textContent = recordedSamples.length.toLocaleString();
     badge.classList.remove('hidden');
+    badge.classList.add('flex');
   } else {
     badge.classList.add('hidden');
+    badge.classList.remove('flex');
   }
 }
 
@@ -335,7 +413,7 @@ function startRec() {
   recordStart = new Date().toISOString();
   recordStartPerfNow = performance.now();
   hasPendingSave = false;
-  clearChartBuffers();   // fresh view from the start of the recording
+  clearChartBuffers();
   recording = true;
   updatePendingSaveUI();
   document.getElementById('rec-indicator').classList.remove('hidden');
@@ -347,7 +425,7 @@ function startRec() {
 function stopRec() {
   recording = false;
   hasPendingSave = recordedSamples.length > 0;
-  clearChartBuffers();   // back to sliding window, start clean
+  clearChartBuffers();
   updatePendingSaveUI();
   document.getElementById('rec-indicator').classList.add('hidden');
   document.getElementById('btn-rec').disabled  = false;
@@ -359,10 +437,10 @@ function saveRecording() {
   if (recordedSamples.length === 0) return;
   const payload = {
     metadata: {
-      start:      recordStart,
-      end:        new Date().toISOString(),
-      url:        cfg.url,
-      calc:       cfg.calc,
+      start: recordStart,
+      end:   new Date().toISOString(),
+      url:   cfg.url,
+      calc:  cfg.calc,
       windowSecs: cfg.window,
       samples:    recordedSamples.length,
     },
@@ -374,13 +452,12 @@ function saveRecording() {
   a.download = cfg.filename || 'medicion.json';
   a.click();
   URL.revokeObjectURL(a.href);
-
   hasPendingSave = false;
   updatePendingSaveUI();
   document.getElementById('btn-save').disabled = true;
 }
 
-// ─── Settings modal ───────────────────────────────────────────────────────────
+// ─── Settings ─────────────────────────────────────────────────────────────────
 
 function openSettings() {
   document.getElementById('cfg-url').value            = cfg.url;
@@ -398,21 +475,17 @@ function closeSettings() {
 }
 
 function applySettings() {
-  cfg.url          = document.getElementById('cfg-url').value.trim()         || DEFAULTS.url;
-  cfg.window       = parseFloat(document.getElementById('cfg-window').value)  || DEFAULTS.window;
+  cfg.url          = document.getElementById('cfg-url').value.trim()          || DEFAULTS.url;
+  cfg.window       = parseFloat(document.getElementById('cfg-window').value)   || DEFAULTS.window;
   cfg.calc         = document.getElementById('cfg-calc').value;
-  cfg.filename     = document.getElementById('cfg-filename').value.trim()     || DEFAULTS.filename;
+  cfg.filename     = document.getElementById('cfg-filename').value.trim()      || DEFAULTS.filename;
   cfg.filterOn     = document.getElementById('cfg-filter-on').checked;
   cfg.filterWindow = parseInt(document.getElementById('cfg-filter-window').value, 10) || DEFAULTS.filterWindow;
   saveConfig(cfg);
-
   resetRings();
-
   chart.data.datasets[4].label = cfg.calc === 'median' ? 'MEDIANA' : 'MEDIA';
-
   disconnect();
   connect();
-
   closeSettings();
 }
 
@@ -420,14 +493,8 @@ function applySettings() {
 
 function updateDarkToggle() {
   const thumb = document.getElementById('toggle-dark-thumb');
-  const btn   = document.getElementById('toggle-dark');
-  if (cfg.dark) {
-    thumb.style.transform = 'translateX(20px)';
-    btn.style.backgroundColor = '#1a8c1a';
-  } else {
-    thumb.style.transform = 'translateX(0)';
-    btn.style.backgroundColor = '#4a7a4a';
-  }
+  const dark = document.documentElement.classList.contains('dark');
+  thumb.style.transform = dark ? 'translateX(20px)' : 'translateX(0)';
 }
 
 function applyDark() {
@@ -436,47 +503,49 @@ function applyDark() {
   } else {
     document.documentElement.classList.remove('dark');
   }
+  updateChartTheme();
+  drawCOP(0, 0);
 }
 
-// ─── Mixed content detection ──────────────────────────────────────────────────
+// ─── Mixed content ────────────────────────────────────────────────────────────
 
 function checkMixedContent() {
   if (location.protocol === 'https:' && cfg.url.startsWith('http://')) {
-    document.getElementById('mixed-content-banner').classList.remove('hidden');
+    const b = document.getElementById('mixed-content-banner');
+    b.classList.remove('hidden');
+    b.classList.add('flex');
   }
 }
 
 // ─── Clock ────────────────────────────────────────────────────────────────────
 
-function tickClock() {
-  const now = new Date();
-  document.getElementById('clock').textContent =
-    now.toTimeString().slice(0, 8);
-}
-setInterval(tickClock, 1000);
-tickClock();
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toTimeString().slice(0, 8);
+}, 1000);
 
-// ─── Wire up events ───────────────────────────────────────────────────────────
+// ─── Event wiring ─────────────────────────────────────────────────────────────
 
 document.getElementById('btn-settings').addEventListener('click', openSettings);
 document.getElementById('modal-close').addEventListener('click', closeSettings);
 document.getElementById('settings-save').addEventListener('click', applySettings);
+document.getElementById('modal-settings').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeSettings();
+});
 
 document.getElementById('btn-rec').addEventListener('click', startRec);
 document.getElementById('btn-stop').addEventListener('click', stopRec);
 document.getElementById('btn-save').addEventListener('click', saveRecording);
 
+document.getElementById('btn-reset').addEventListener('click', () => espAction('TARE'));
 document.getElementById('esp-tare').addEventListener('click', () => espAction('TARE'));
 document.getElementById('esp-save').addEventListener('click', () => espAction('SAVE'));
-
 document.getElementById('esp-calibrate-open').addEventListener('click', () => {
   document.getElementById('calibrate-form').classList.toggle('hidden');
 });
-
 document.getElementById('esp-calibrate-send').addEventListener('click', () => {
   const w = parseFloat(document.getElementById('cal-weight').value);
   if (isNaN(w) || w <= 0) {
-    document.getElementById('esp-response').textContent = 'ERR: peso inválido';
+    document.getElementById('esp-response').textContent = 'Error: peso inválido';
     return;
   }
   espAction(`CALIBRATE:${w}`);
@@ -489,18 +558,15 @@ document.getElementById('toggle-dark').addEventListener('click', () => {
   saveConfig(cfg);
 });
 
-// close modal on backdrop click
-document.getElementById('modal-settings').addEventListener('click', (e) => {
-  if (e.target === e.currentTarget) closeSettings();
-});
+window.addEventListener('resize', initCOPCanvas);
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
 applyDark();
 checkMixedContent();
+initCOPCanvas();
 connect();
 
-// Service Worker registration
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./service-worker.js').catch(() => {});
 }
