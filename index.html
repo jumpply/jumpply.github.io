@@ -60,6 +60,14 @@
   <!-- Chart area -->
   <div class="flex-1 relative p-2 min-h-0">
     <canvas id="scope-chart" class="w-full h-full"></canvas>
+
+    <!-- Pending save badge — shown after STOP, before SAVE -->
+    <div id="pending-save-badge" class="hidden absolute bottom-3 right-3 flex items-center gap-1.5 bg-yellow-900/80 border border-yellow-600 text-yellow-300 text-xs font-mono px-2.5 py-1.5 rounded-lg backdrop-blur-sm">
+      <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
+      </svg>
+      <span id="pending-save-count">0</span> muestras sin guardar
+    </div>
   </div>
 
   <!-- Legend -->

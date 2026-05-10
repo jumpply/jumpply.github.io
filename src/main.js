@@ -30,6 +30,8 @@ let sse = null;
 let recording = false;
 let recordedSamples = [];
 let recordStart = null;
+let recordStartPerfNow = 0;
+let hasPendingSave = false;
 let frameCount = 0;
 let lastSpsTs = performance.now();
 let spsAccum = 0;
@@ -167,10 +169,13 @@ function ingestFrame(raw) {
 
   function push(buf, val) {
     buf.push({ x: now, y: val });
-    // trim old points outside the window
-    let lo = 0;
-    while (lo < buf.length - 1 && buf[lo].x < cutoff) lo++;
-    if (lo > 0) buf.splice(0, lo);
+    if (!recording) {
+      // sliding window: discard points older than the configured window
+      let lo = 0;
+      while (lo < buf.length - 1 && buf[lo].x < cutoff) lo++;
+      if (lo > 0) buf.splice(0, lo);
+    }
+    // while recording: accumulate everything, no trim
   }
 
   push(buffers.fl,   fl);
@@ -185,7 +190,11 @@ function ingestFrame(raw) {
   chart.data.datasets[3].data = buffers.rr;
   chart.data.datasets[4].data = buffers.calc;
 
-  chart.options.scales.x.min = cutoff;
+  if (recording) {
+    chart.options.scales.x.min = recordStartPerfNow;
+  } else {
+    chart.options.scales.x.min = cutoff;
+  }
   chart.options.scales.x.max = now;
   chart.update('none');
 
@@ -297,10 +306,29 @@ async function espAction(cmd) {
 
 // ─── Recording ────────────────────────────────────────────────────────────────
 
+function clearChartBuffers() {
+  for (const k of Object.keys(buffers)) buffers[k] = [];
+}
+
+function updatePendingSaveUI() {
+  const badge = document.getElementById('pending-save-badge');
+  const count = document.getElementById('pending-save-count');
+  if (hasPendingSave && recordedSamples.length > 0) {
+    count.textContent = recordedSamples.length.toLocaleString();
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
 function startRec() {
   recordedSamples = [];
   recordStart = new Date().toISOString();
+  recordStartPerfNow = performance.now();
+  hasPendingSave = false;
+  clearChartBuffers();   // fresh view from the start of the recording
   recording = true;
+  updatePendingSaveUI();
   document.getElementById('rec-indicator').classList.remove('hidden');
   document.getElementById('btn-rec').disabled  = true;
   document.getElementById('btn-stop').disabled = false;
@@ -309,10 +337,13 @@ function startRec() {
 
 function stopRec() {
   recording = false;
+  hasPendingSave = recordedSamples.length > 0;
+  clearChartBuffers();   // back to sliding window, start clean
+  updatePendingSaveUI();
   document.getElementById('rec-indicator').classList.add('hidden');
   document.getElementById('btn-rec').disabled  = false;
   document.getElementById('btn-stop').disabled = true;
-  document.getElementById('btn-save').disabled = recordedSamples.length === 0;
+  document.getElementById('btn-save').disabled = !hasPendingSave;
 }
 
 function saveRecording() {
@@ -334,6 +365,10 @@ function saveRecording() {
   a.download = cfg.filename || 'medicion.json';
   a.click();
   URL.revokeObjectURL(a.href);
+
+  hasPendingSave = false;
+  updatePendingSaveUI();
+  document.getElementById('btn-save').disabled = true;
 }
 
 // ─── Settings modal ───────────────────────────────────────────────────────────
