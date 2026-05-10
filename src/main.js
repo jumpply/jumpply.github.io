@@ -1,0 +1,426 @@
+// ─── Config ──────────────────────────────────────────────────────────────────
+
+const DEFAULTS = {
+  url:      'http://192.168.4.1',
+  window:   10,
+  calc:     'median',
+  filename: 'medicion.json',
+  dark:     true,
+};
+
+function loadConfig() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('jpConfig') || '{}');
+    return { ...DEFAULTS, ...saved };
+  } catch {
+    return { ...DEFAULTS };
+  }
+}
+
+function saveConfig(cfg) {
+  localStorage.setItem('jpConfig', JSON.stringify(cfg));
+}
+
+// ─── State ───────────────────────────────────────────────────────────────────
+
+let cfg = loadConfig();
+let sse = null;
+let recording = false;
+let recordedSamples = [];
+let recordStart = null;
+let frameCount = 0;
+let lastSpsTs = performance.now();
+let spsAccum = 0;
+
+// Chart data buffers: each entry { t: DOMHighResTimeStamp, v: number }
+const buffers = { fl: [], fr: [], rl: [], rr: [], calc: [] };
+
+// ─── Chart setup ─────────────────────────────────────────────────────────────
+
+const canvas = document.getElementById('scope-chart');
+const ctx = canvas.getContext('2d');
+
+const COLORS = {
+  fl:   '#00ff88',
+  fr:   '#00aaff',
+  rl:   '#ff8800',
+  rr:   '#ff4455',
+  calc: '#ffffff',
+};
+
+function makeDataset(key, label, borderWidth = 1.5) {
+  return {
+    label,
+    data: [],
+    borderColor: COLORS[key],
+    borderWidth,
+    pointRadius: 0,
+    tension: 0,
+    parsing: false,
+  };
+}
+
+const chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    datasets: [
+      makeDataset('fl',   'FL'),
+      makeDataset('fr',   'FR'),
+      makeDataset('rl',   'RL'),
+      makeDataset('rr',   'RR'),
+      makeDataset('calc', cfg.calc.toUpperCase(), 2.5),
+    ],
+  },
+  options: {
+    animation: false,
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: { enabled: false },
+    },
+    scales: {
+      x: {
+        type: 'linear',
+        ticks: { display: false },
+        grid: {
+          color: '#1a2a1a',
+          drawBorder: false,
+        },
+        border: { color: '#1f3a1f' },
+      },
+      y: {
+        ticks: {
+          color: '#1a8c1a',
+          font: { family: 'JetBrains Mono', size: 10 },
+          maxTicksLimit: 6,
+        },
+        grid: {
+          color: '#1a2a1a',
+          drawBorder: false,
+        },
+        border: { color: '#1f3a1f' },
+      },
+    },
+  },
+});
+
+// ─── Computed metric ──────────────────────────────────────────────────────────
+
+function computeCalc(fl, fr, rl, rr) {
+  switch (cfg.calc) {
+    case 'median': {
+      const sorted = [fl, fr, rl, rr].slice().sort((a, b) => a - b);
+      return (sorted[1] + sorted[2]) / 2;
+    }
+    case 'mean':
+      return (fl + fr + rl + rr) / 4;
+    case 'total':
+      return fl + fr + rl + rr;
+    default:
+      return (fl + fr + rl + rr) / 4;
+  }
+}
+
+// ─── SSE data ingestion ───────────────────────────────────────────────────────
+
+function ingestFrame(raw) {
+  const now = performance.now();
+  const { fl = 0, fr = 0, rl = 0, rr = 0 } = raw;
+
+  const calc = computeCalc(fl, fr, rl, rr);
+  const windowMs = cfg.window * 1000;
+  const cutoff = now - windowMs;
+
+  function push(buf, val) {
+    buf.push({ x: now, y: val });
+    // trim old points outside the window
+    let lo = 0;
+    while (lo < buf.length - 1 && buf[lo].x < cutoff) lo++;
+    if (lo > 0) buf.splice(0, lo);
+  }
+
+  push(buffers.fl,   fl);
+  push(buffers.fr,   fr);
+  push(buffers.rl,   rl);
+  push(buffers.rr,   rr);
+  push(buffers.calc, calc);
+
+  chart.data.datasets[0].data = buffers.fl;
+  chart.data.datasets[1].data = buffers.fr;
+  chart.data.datasets[2].data = buffers.rl;
+  chart.data.datasets[3].data = buffers.rr;
+  chart.data.datasets[4].data = buffers.calc;
+
+  chart.options.scales.x.min = cutoff;
+  chart.options.scales.x.max = now;
+  chart.update('none');
+
+  // SPS counter
+  spsAccum++;
+  const elapsed = now - lastSpsTs;
+  if (elapsed >= 1000) {
+    const sps = Math.round(spsAccum * 1000 / elapsed);
+    document.getElementById('sps-counter').textContent = `${sps} SPS`;
+    spsAccum = 0;
+    lastSpsTs = now;
+  }
+
+  if (recording) {
+    recordedSamples.push({
+      t: raw.t ?? Date.now(),
+      fl, fr, rl, rr, calc,
+    });
+  }
+}
+
+// ─── SSE connection ───────────────────────────────────────────────────────────
+
+function connect() {
+  if (sse) {
+    sse.close();
+    sse = null;
+  }
+
+  const url = `${cfg.url}/data`;
+  setStatus('connecting');
+
+  try {
+    sse = new EventSource(url);
+  } catch (e) {
+    setStatus('error');
+    return;
+  }
+
+  sse.onopen = () => setStatus('connected');
+
+  sse.onmessage = (ev) => {
+    try {
+      ingestFrame(JSON.parse(ev.data));
+    } catch { /* skip malformed frame */ }
+  };
+
+  sse.onerror = () => {
+    setStatus('disconnected');
+    sse.close();
+    sse = null;
+    // auto-reconnect after 3s
+    setTimeout(connect, 3000);
+  };
+}
+
+function disconnect() {
+  if (sse) {
+    sse.close();
+    sse = null;
+  }
+  setStatus('disconnected');
+}
+
+// ─── Status ───────────────────────────────────────────────────────────────────
+
+function setStatus(state) {
+  const dot  = document.getElementById('status-dot');
+  const text = document.getElementById('status-text');
+  dot.className = 'w-2 h-2 rounded-full';
+  switch (state) {
+    case 'connected':
+      dot.classList.add('bg-green-400');
+      text.textContent = `CONNECTED · ${cfg.url}`;
+      break;
+    case 'connecting':
+      dot.classList.add('bg-yellow-400', 'animate-pulse');
+      text.textContent = 'CONNECTING…';
+      break;
+    case 'error':
+      dot.classList.add('bg-red-500');
+      text.textContent = 'ERROR';
+      break;
+    default:
+      dot.classList.add('bg-red-500');
+      text.textContent = 'DISCONNECTED';
+  }
+}
+
+// ─── ESP32 actions ────────────────────────────────────────────────────────────
+
+async function espAction(cmd) {
+  const resp = document.getElementById('esp-response');
+  resp.textContent = '…';
+  try {
+    const r = await fetch(`${cfg.url}/action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: cmd,
+    });
+    const text = await r.text();
+    resp.textContent = text;
+    resp.className = 'mt-2 text-xs text-green-400 min-h-[1.2em]';
+  } catch (e) {
+    resp.textContent = `ERR: ${e.message}`;
+    resp.className = 'mt-2 text-xs text-red-400 min-h-[1.2em]';
+  }
+}
+
+// ─── Recording ────────────────────────────────────────────────────────────────
+
+function startRec() {
+  recordedSamples = [];
+  recordStart = new Date().toISOString();
+  recording = true;
+  document.getElementById('rec-indicator').classList.remove('hidden');
+  document.getElementById('btn-rec').disabled  = true;
+  document.getElementById('btn-stop').disabled = false;
+  document.getElementById('btn-save').disabled = true;
+}
+
+function stopRec() {
+  recording = false;
+  document.getElementById('rec-indicator').classList.add('hidden');
+  document.getElementById('btn-rec').disabled  = false;
+  document.getElementById('btn-stop').disabled = true;
+  document.getElementById('btn-save').disabled = recordedSamples.length === 0;
+}
+
+function saveRecording() {
+  if (recordedSamples.length === 0) return;
+  const payload = {
+    metadata: {
+      start:      recordStart,
+      end:        new Date().toISOString(),
+      url:        cfg.url,
+      calc:       cfg.calc,
+      windowSecs: cfg.window,
+      samples:    recordedSamples.length,
+    },
+    samples: recordedSamples,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = cfg.filename || 'medicion.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ─── Settings modal ───────────────────────────────────────────────────────────
+
+function openSettings() {
+  document.getElementById('cfg-url').value      = cfg.url;
+  document.getElementById('cfg-window').value   = cfg.window;
+  document.getElementById('cfg-calc').value     = cfg.calc;
+  document.getElementById('cfg-filename').value = cfg.filename;
+  updateDarkToggle();
+  document.getElementById('modal-settings').classList.remove('hidden');
+}
+
+function closeSettings() {
+  document.getElementById('modal-settings').classList.add('hidden');
+}
+
+function applySettings() {
+  cfg.url      = document.getElementById('cfg-url').value.trim()      || DEFAULTS.url;
+  cfg.window   = parseFloat(document.getElementById('cfg-window').value) || DEFAULTS.window;
+  cfg.calc     = document.getElementById('cfg-calc').value;
+  cfg.filename = document.getElementById('cfg-filename').value.trim()  || DEFAULTS.filename;
+  saveConfig(cfg);
+
+  // update chart label for calc line
+  chart.data.datasets[4].label = cfg.calc.toUpperCase();
+
+  // reconnect with new URL
+  disconnect();
+  connect();
+
+  closeSettings();
+}
+
+// ─── Dark mode ────────────────────────────────────────────────────────────────
+
+function updateDarkToggle() {
+  const thumb = document.getElementById('toggle-dark-thumb');
+  const btn   = document.getElementById('toggle-dark');
+  if (cfg.dark) {
+    thumb.style.transform = 'translateX(20px)';
+    btn.style.backgroundColor = '#1a8c1a';
+  } else {
+    thumb.style.transform = 'translateX(0)';
+    btn.style.backgroundColor = '#4a7a4a';
+  }
+}
+
+function applyDark() {
+  if (cfg.dark) {
+    document.documentElement.classList.add('dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+  }
+}
+
+// ─── Mixed content detection ──────────────────────────────────────────────────
+
+function checkMixedContent() {
+  if (location.protocol === 'https:' && cfg.url.startsWith('http://')) {
+    document.getElementById('mixed-content-banner').classList.remove('hidden');
+  }
+}
+
+// ─── Clock ────────────────────────────────────────────────────────────────────
+
+function tickClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toTimeString().slice(0, 8);
+}
+setInterval(tickClock, 1000);
+tickClock();
+
+// ─── Wire up events ───────────────────────────────────────────────────────────
+
+document.getElementById('btn-settings').addEventListener('click', openSettings);
+document.getElementById('modal-close').addEventListener('click', closeSettings);
+document.getElementById('settings-save').addEventListener('click', applySettings);
+
+document.getElementById('btn-rec').addEventListener('click', startRec);
+document.getElementById('btn-stop').addEventListener('click', stopRec);
+document.getElementById('btn-save').addEventListener('click', saveRecording);
+
+document.getElementById('esp-tare').addEventListener('click', () => espAction('TARE'));
+document.getElementById('esp-save').addEventListener('click', () => espAction('SAVE'));
+
+document.getElementById('esp-calibrate-open').addEventListener('click', () => {
+  document.getElementById('calibrate-form').classList.toggle('hidden');
+});
+
+document.getElementById('esp-calibrate-send').addEventListener('click', () => {
+  const w = parseFloat(document.getElementById('cal-weight').value);
+  if (isNaN(w) || w <= 0) {
+    document.getElementById('esp-response').textContent = 'ERR: peso inválido';
+    return;
+  }
+  espAction(`CALIBRATE:${w}`);
+});
+
+document.getElementById('toggle-dark').addEventListener('click', () => {
+  cfg.dark = !cfg.dark;
+  applyDark();
+  updateDarkToggle();
+  saveConfig(cfg);
+});
+
+// close modal on backdrop click
+document.getElementById('modal-settings').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeSettings();
+});
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+
+applyDark();
+checkMixedContent();
+connect();
+
+// Service Worker registration
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./service-worker.js').catch(() => {});
+}

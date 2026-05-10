@@ -1,0 +1,63 @@
+/* Oscilloscope grid background */
+#scope-chart {
+  background-color: #0a0a0a;
+}
+
+/* Action buttons */
+.action-btn {
+  @apply flex flex-col items-center gap-0.5 text-[#33ff33] opacity-80
+         hover:opacity-100 active:scale-95 transition-all
+         disabled:opacity-30 disabled:cursor-not-allowed
+         min-w-[56px] py-1 px-2 rounded-lg;
+}
+
+.action-btn:disabled svg {
+  @apply opacity-40;
+}
+
+/* Settings helpers */
+.settings-section-title {
+  @apply text-[10px] tracking-widest text-scope-dim mb-2;
+}
+
+.settings-label {
+  @apply flex flex-col gap-1 text-xs text-scope-dim;
+}
+
+.settings-input {
+  @apply bg-gray-900 border border-scope-border rounded-lg px-3 py-2
+         text-scope-text text-sm focus:outline-none focus:border-scope-text
+         placeholder-scope-dim/40;
+}
+
+select.settings-input option {
+  background-color: #111;
+}
+
+.esp-btn {
+  @apply bg-gray-900 border border-scope-border rounded-lg px-3 py-2
+         text-xs text-scope-text hover:bg-gray-800 active:scale-95
+         transition-all tracking-wider;
+}
+
+/* Light mode overrides */
+html:not(.dark) body {
+  background-color: #f0f4f0;
+  color: #1a3a1a;
+}
+
+html:not(.dark) #scope-chart {
+  background-color: #e8f0e8;
+}
+
+html:not(.dark) .bg-scope-bg { background-color: #f0f4f0; }
+html:not(.dark) .text-scope-text { color: #0d6e0d; }
+html:not(.dark) .text-scope-dim { color: #4a7a4a; }
+html:not(.dark) .border-scope-border { border-color: #9bbf9b; }
+html:not(.dark) .action-btn { color: #0d6e0d; }
+html:not(.dark) .settings-input { background-color: #fff; border-color: #9bbf9b; color: #0d6e0d; }
+html:not(.dark) .esp-btn { background-color: #fff; border-color: #9bbf9b; color: #0d6e0d; }
+html:not(.dark) .bg-gray-950 { background-color: #f8faf8; }
+html:not(.dark) .bg-gray-900 { background-color: #f0f4f0; }
+html:not(.dark) .bg-gray-800 { background-color: #e0eae0; }
+html:not(.dark) #settings-save { background-color: #0d6e0d; color: #fff; }
