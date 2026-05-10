@@ -31,6 +31,7 @@ let recording = false;
 let recordedSamples = [];
 let recordStart = null;
 let recordStartPerfNow = 0;
+let lastEspT = -1;  // last seen ESP32 timestamp, deduplication guard
 let hasPendingSave = false;
 let frameCount = 0;
 let lastSpsTs = performance.now();
@@ -158,6 +159,10 @@ function computeCalc(fl, fr, rl, rr) {
 // ─── SSE data ingestion ───────────────────────────────────────────────────────
 
 function ingestFrame(raw) {
+  const espT = raw.t ?? -1;
+  if (espT !== -1 && espT === lastEspT) return;  // duplicate frame, skip
+  lastEspT = espT;
+
   const now = performance.now();
   const fl = applyFilter('fl', raw.fl ?? 0);
   const fr = applyFilter('fr', raw.fr ?? 0);
