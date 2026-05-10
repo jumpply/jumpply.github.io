@@ -69,11 +69,12 @@
 
   <!-- Legend -->
   <div class="flex flex-wrap justify-center gap-x-4 gap-y-1 px-3 py-1.5 text-xs border-t border-scope-border">
-    <span class="flex items-center gap-1"><span class="w-3 h-0.5 bg-[#00ff88] inline-block"></span>FL</span>
-    <span class="flex items-center gap-1"><span class="w-3 h-0.5 bg-[#00aaff] inline-block"></span>FR</span>
-    <span class="flex items-center gap-1"><span class="w-3 h-0.5 bg-[#ff8800] inline-block"></span>RL</span>
-    <span class="flex items-center gap-1"><span class="w-3 h-0.5 bg-[#ff4455] inline-block"></span>RR</span>
-    <span class="flex items-center gap-1"><span class="w-4 h-0.5 bg-[#ffffff] inline-block"></span>TOTAL</span>
+    <span class="flex items-center gap-1"><span class="w-3 h-px bg-[#00ff88] inline-block opacity-80"></span>FL</span>
+    <span class="flex items-center gap-1"><span class="w-3 h-px bg-[#00aaff] inline-block opacity-80"></span>FR</span>
+    <span class="flex items-center gap-1"><span class="w-3 h-px bg-[#ff8800] inline-block opacity-80"></span>RL</span>
+    <span class="flex items-center gap-1"><span class="w-3 h-px bg-[#ff4455] inline-block opacity-80"></span>RR</span>
+    <span class="flex items-center gap-1"><span class="w-3 h-0.5 bg-gray-400 inline-block opacity-60"></span>CALC</span>
+    <span class="flex items-center gap-1 font-semibold text-[#33ff33]"><span class="w-4 h-1 bg-[#33ff33] inline-block rounded-full"></span>TOTAL</span>
   </div>
 
   <!-- Action bar -->
@@ -136,11 +137,10 @@
           <label class="settings-label">Ventana de tiempo (segundos)
             <input id="cfg-window" type="number" min="1" max="120" class="settings-input" />
           </label>
-          <label class="settings-label mt-3">Línea calculada
+          <label class="settings-label mt-3">Línea secundaria (CALC)
             <select id="cfg-calc" class="settings-input">
-              <option value="median">Mediana</option>
-              <option value="mean">Media</option>
-              <option value="total">Total (suma)</option>
+              <option value="median">Mediana de los 4 sensores</option>
+              <option value="mean">Media de los 4 sensores</option>
             </select>
           </label>
         </section>

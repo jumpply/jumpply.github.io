@@ -37,7 +37,7 @@ let lastSpsTs = performance.now();
 let spsAccum = 0;
 
 // Chart data buffers: each entry { x: DOMHighResTimeStamp, y: number }
-const buffers = { fl: [], fr: [], rl: [], rr: [], calc: [] };
+const buffers = { fl: [], fr: [], rl: [], rr: [], calc: [], total: [] };
 
 // Ring buffers for the median pre-filter (raw values, not chart points)
 const rawRings = { fl: [], fr: [], rl: [], rr: [] };
@@ -72,14 +72,15 @@ const canvas = document.getElementById('scope-chart');
 const ctx = canvas.getContext('2d');
 
 const COLORS = {
-  fl:   '#00ff88',
-  fr:   '#00aaff',
-  rl:   '#ff8800',
-  rr:   '#ff4455',
-  calc: '#ffffff',
+  fl:    '#00ff88',
+  fr:    '#00aaff',
+  rl:    '#ff8800',
+  rr:    '#ff4455',
+  calc:  'rgba(180,180,180,0.55)',
+  total: '#33ff33',
 };
 
-function makeDataset(key, label, borderWidth = 1.5) {
+function makeDataset(key, label, borderWidth = 1.2, alpha = 1) {
   return {
     label,
     data: [],
@@ -88,6 +89,7 @@ function makeDataset(key, label, borderWidth = 1.5) {
     pointRadius: 0,
     tension: 0,
     parsing: false,
+    borderDash: [],
   };
 }
 
@@ -95,11 +97,13 @@ const chart = new Chart(ctx, {
   type: 'line',
   data: {
     datasets: [
-      makeDataset('fl',   'FL'),
-      makeDataset('fr',   'FR'),
-      makeDataset('rl',   'RL'),
-      makeDataset('rr',   'RR'),
-      makeDataset('calc', cfg.calc.toUpperCase(), 2.5),
+      makeDataset('fl',   'FL',   1),
+      makeDataset('fr',   'FR',   1),
+      makeDataset('rl',   'RL',   1),
+      makeDataset('rr',   'RR',   1),
+      makeDataset('calc', cfg.calc.toUpperCase(), 1.5),
+      // total drawn last so it renders on top
+      { ...makeDataset('total', 'TOTAL', 3), borderColor: COLORS.total },
     ],
   },
   options: {
@@ -146,9 +150,6 @@ function computeCalc(fl, fr, rl, rr) {
       return (sorted[1] + sorted[2]) / 2;
     }
     case 'mean':
-      return (fl + fr + rl + rr) / 4;
-    case 'total':
-      return fl + fr + rl + rr;
     default:
       return (fl + fr + rl + rr) / 4;
   }
@@ -163,7 +164,8 @@ function ingestFrame(raw) {
   const rl = applyFilter('rl', raw.rl ?? 0);
   const rr = applyFilter('rr', raw.rr ?? 0);
 
-  const calc = computeCalc(fl, fr, rl, rr);
+  const total = fl + fr + rl + rr;
+  const calc  = computeCalc(fl, fr, rl, rr);
   const windowMs = cfg.window * 1000;
   const cutoff = now - windowMs;
 
@@ -178,17 +180,19 @@ function ingestFrame(raw) {
     // while recording: accumulate everything, no trim
   }
 
-  push(buffers.fl,   fl);
-  push(buffers.fr,   fr);
-  push(buffers.rl,   rl);
-  push(buffers.rr,   rr);
-  push(buffers.calc, calc);
+  push(buffers.fl,    fl);
+  push(buffers.fr,    fr);
+  push(buffers.rl,    rl);
+  push(buffers.rr,    rr);
+  push(buffers.calc,  calc);
+  push(buffers.total, total);
 
   chart.data.datasets[0].data = buffers.fl;
   chart.data.datasets[1].data = buffers.fr;
   chart.data.datasets[2].data = buffers.rl;
   chart.data.datasets[3].data = buffers.rr;
   chart.data.datasets[4].data = buffers.calc;
+  chart.data.datasets[5].data = buffers.total;
 
   if (recording) {
     chart.options.scales.x.min = recordStartPerfNow;
@@ -211,7 +215,7 @@ function ingestFrame(raw) {
   if (recording) {
     recordedSamples.push({
       t: raw.t ?? Date.now(),
-      fl, fr, rl, rr, calc,
+      fl, fr, rl, rr, total, calc,
     });
   }
 }
@@ -399,7 +403,7 @@ function applySettings() {
 
   resetRings();
 
-  chart.data.datasets[4].label = cfg.calc.toUpperCase();
+  chart.data.datasets[4].label = cfg.calc === 'median' ? 'MEDIANA' : 'MEDIA';
 
   disconnect();
   connect();
