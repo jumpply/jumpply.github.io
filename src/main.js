@@ -124,7 +124,7 @@ const chart = new Chart(ctx, {
       y: {
         ticks: {
           color: '#1a8c1a',
-          font: { family: 'JetBrains Mono', size: 10 },
+          font: { family: 'ui-monospace, monospace', size: 10 },
           maxTicksLimit: 6,
         },
         grid: {

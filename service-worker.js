@@ -5,8 +5,11 @@ const PRECACHE = [
   './index.html',
   './src/main.js',
   './src/styles.css',
+  './src/tailwind.min.js',
+  './src/chart.umd.min.js',
   './manifest.json',
-  // CDN resources are cached on first fetch (see fetch handler)
+  './icons/icon-192.png',
+  './icons/icon-512.png',
 ];
 
 self.addEventListener('install', (ev) => {
