@@ -29,3 +29,14 @@ select.field-input option {
          rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-200
          hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-all;
 }
+
+.tab-btn {
+  @apply flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg
+         text-xs font-semibold tracking-wide transition-colors
+         text-gray-500 dark:text-gray-400
+         hover:text-gray-900 dark:hover:text-white;
+}
+
+.tab-active {
+  @apply bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white;
+}
